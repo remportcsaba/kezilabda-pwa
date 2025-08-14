@@ -25,7 +25,6 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// runtime cache: ami nincs előre listázva, azt is eltároljuk későbbre
 self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.match(e.request).then(cached => {
