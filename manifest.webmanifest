@@ -1,0 +1,28 @@
+{
+  "name": "Kézilabda Statisztika – Dual Pro",
+  "short_name": "Kézi Stat",
+  "description": "2×30 perc, 2 csapat, 16-16 játékos, gól/kapus védés/7m, kapus-statisztika, exportok.",
+  "lang": "hu-HU",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0b0c0f",
+  "theme_color": "#2d6cdf",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
