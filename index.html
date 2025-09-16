@@ -1,11 +1,18 @@
-# Write a full-featured index.html into /mnt/data/masolas.txt that restores the full table UI with requested features.
+# Create a complete index.html with all features and save it to /mnt/data/masolas.txt
+
 html = r"""<!DOCTYPE html>
 <html lang="hu">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kézilabda stat – V5 (helyreállított, javított)</title>
+<title>Kézilabda stat – V5 (helyreállított + mentés/export)</title>
 <meta name="theme-color" content="#1b5cff">
+
+<!-- Exportáláshoz szükséges könyvtárak -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.1/dist/jspdf.plugin.autotable.min.js"></script>
+
 <style>
   :root{
     --bg:#0b0c0f; --panel:#0f1218; --card:#101522; --muted:#94a3b8; --text:#e6edf6;
@@ -57,233 +64,6 @@ html = r"""<!DOCTYPE html>
   .time-edit input{width:64px;text-align:center;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);padding:2px 4px}
   .veszprem-bar{display:flex;gap:6px;align-items:center;margin:6px 8px 0}
 </style>
-  <!-- Exportáláshoz szükséges könyvtárak -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.1/dist/jspdf.plugin.autotable.min.js"></script>
-  <script>
-// ==== Mentés / export / visszaállítás ====
-
-const STORAGE_KEY_PREFIX = "kezistats_v5_";
-
-function snapshot() {
-  // A jelenlegi state-ből menthető pillanatkép (mély másolat)
-  return JSON.parse(JSON.stringify(state));
-}
-
-function applySnapshot(snap) {
-  if (!snap) return;
-  pause();
-  state = snap;            // teljes visszaállítás
-  selectedRow = {A:null,B:null}; // kijelölés ürítése
-  renderTeams();
-  displayTime();
-  updateUndoUI();
-  <button class="btn" id="saveLocalBtn" title="Biztonsági mentés (helyi tároló)">💾 Mentés</button>
-<button class="btn" id="openLocalBtn" title="Mentett meccsek megnyitása">📂 Megnyitás</button>
-<button class="btn" id="exportJsonBtn" title="JSON export">JSON</button>
-<label class="btn" title="JSON import">
-  ⬆ JSON
-  <input type="file" id="importJsonInput" accept="application/json" style="display:none">
-</label>
-<button class="btn" id="exportXlsxBtn" title="Excel export (XLSX)">XLSX</button>
-<button class="btn" id="exportPdfBtn" title="PDF export">PDF</button>
-
-}
-
-function makeStorageKey() {
-  const d = (state.matchDate || '').trim() || new Date().toISOString().slice(0,10);
-  const m = (state.matchName || '').trim() || 'Ismeretlen meccs';
-  return STORAGE_KEY_PREFIX + d + "___" + m;
-}
-
-function saveToLocal() {
-  const key = makeStorageKey();
-  const data = snapshot();
-  localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data }));
-  alert("Elmentve: " + key.replace(STORAGE_KEY_PREFIX, ''));
-}
-
-function loadAllKeys() {
-  const keys = [];
-  for (let i=0;i<localStorage.length;i++){
-    const k = localStorage.key(i);
-    if (k && k.startsWith(STORAGE_KEY_PREFIX)) keys.push(k);
-  }
-  // legutóbbi felül
-  keys.sort((a,b)=> {
-    const A = JSON.parse(localStorage.getItem(a)||'{}')?.savedAt || 0;
-    const B = JSON.parse(localStorage.getItem(b)||'{}')?.savedAt || 0;
-    return B - A;
-  });
-  return keys;
-}
-
-function openSavedPanel() {
-  const body = document.getElementById('savedBody');
-  body.innerHTML = "";
-  loadAllKeys().forEach(k=>{
-    const rec = JSON.parse(localStorage.getItem(k) || "{}");
-    const when = new Date(rec.savedAt || Date.now()).toLocaleString();
-    const parts = k.replace(STORAGE_KEY_PREFIX,'').split('___');
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td style="padding:6px; border-bottom:1px solid #1f283a">${parts[0]||''}</td>
-      <td style="padding:6px; border-bottom:1f283a">${parts[1]||''}</td>
-      <td style="padding:6px; border-bottom:1px solid #1f283a; color:#94a3b8">${when}</td>
-      <td style="padding:6px; border-bottom:1px solid #1f283a">
-        <button class="btn btn-small" data-open="${k}">Megnyit</button>
-        <button class="btn btn-small dan" data-del="${k}">Töröl</button>
-      </td>
-    `.replace('1f283a','1px solid #1f283a'); // kis trükk, hogy ne húzza össze a böngésző editor
-    body.appendChild(tr);
-  });
-
-  document.querySelectorAll('[data-open]').forEach(b=>{
-    b.onclick = () => {
-      const k     = b.getAttribute('data-open');
-      const rec   = JSON.parse(localStorage.getItem(k)||'{}');
-      applySnapshot(rec.data);
-      document.getElementById('savedPanel').style.display='none';
-    };
-  });
-  document.querySelectorAll('[data-del]').forEach(b=>{
-    b.onclick = () => {
-      const k = b.getAttribute('data-del');
-      if (confirm("Biztosan törlöd?")) {
-        localStorage.removeItem(k);
-        openSavedPanel();
-      }
-    };
-  });
-
-  document.getElementById('savedPanel').style.display='block';
-  document.getElementById('savedSearch').value = '';
-}
-
-document.getElementById('savedSearch').addEventListener('input', (e)=>{
-  const q = e.target.value.toLowerCase();
-  const rows = document.querySelectorAll('#savedBody tr');
-  rows.forEach(r=>{
-    r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none';
-  });
-});
-
-document.getElementById('savedCloseBtn').onclick = ()=> document.getElementById('savedPanel').style.display='none';
-
-// --- JSON export/import ---
-function exportJSON() {
-  const dataStr = "data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify(snapshot(), null, 2));
-  const a = document.createElement('a');
-  const d = (state.matchDate||'') || new Date().toISOString().slice(0,10);
-  const m = (state.matchName||'meccs').replace(/[^\w\d\- ]+/g,'_').slice(0,40);
-  a.setAttribute("href", dataStr);
-  a.setAttribute("download", `kezistats_${d}_${m}.json`);
-  document.body.appendChild(a);
-  a.click(); a.remove();
-}
-
-function importJSON(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e)=>{
-    try {
-      const obj = JSON.parse(e.target.result);
-      applySnapshot(obj);
-    } catch(err){
-      alert("Érvénytelen JSON.");
-    }
-  };
-  reader.readAsText(file);
-}
-
-// --- XLSX export ---
-function exportXLSX() {
-  if (typeof XLSX === 'undefined') { alert("XLSX könyvtár nem elérhető."); return; }
-  function teamSheet(side){
-    const team = state[side].players.map((p,i)=>({
-      Sorszám: i+1,
-      Nevezett: p.active?1:0,
-      Mez: p.num||'',
-      Név: p.name||'',
-      ON: p.on?1:0,
-      MIN: toMMSS(p.tocSec||0),
-      Lövés: p.shots||0,
-      Gól: p.goals||0,
-      '%': (p.shots? Math.round(p.goals/p.shots*100):0) + '%',
-      '7A': p.p7a||0,
-      '7G': p.p7g||0,
-      '7%': (p.p7a? Math.round(p.p7g/p.p7a*100):0) + '%',
-      TH: p.th||0,
-      BL: p.bl||0,
-      '2P': p.susp?1:0
-    }));
-    return XLSX.utils.json_to_sheet(team);
-  }
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, teamSheet('A'), "Csapat A");
-  XLSX.utils.book_append_sheet(wb, teamSheet('B'), "Csapat B");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{Meccs: state.matchName||'', Dátum: state.matchDate||'', Félidő: state.half, Idő: (state.half===1?'':'30:') + toMMSS(state.elapsed)}]), "Meta");
-  const d = (state.matchDate||'') || new Date().toISOString().slice(0,10);
-  const m = (state.matchName||'meccs').replace(/[^\w\d\- ]+/g,'_').slice(0,40);
-  XLSX.writeFile(wb, `kezistats_${d}_${m}.xlsx`);
-}
-
-// --- PDF export ---
-async function exportPDF() {
-  if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') { alert("jsPDF könyvtár nem elérhető."); return; }
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('l', 'pt', 'a4'); // fekvő A4
-  const title = `Kézilabda stat – ${state.matchName||''}  (${state.matchDate||''})`;
-  doc.setFontSize(14); doc.text(title, 40, 40);
-
-  function teamTable(side, yStart){
-    const head = [['#','Név','ON','MIN','Löv','Gól','%','7A','7G','7%','TH','BL','2P']];
-    const body = state[side].players.map((p,i)=>[
-      p.num||'', p.name||'', p.on?'ON':'OFF', toMMSS(p.tocSec||0), p.shots||0, p.goals||0,
-      (p.shots? Math.round(p.goals/p.shots*100):0)+'%',
-      p.p7a||0, p.p7g||0, (p.p7a? Math.round(p.p7g/p.p7a*100):0)+'%', p.th||0, p.bl||0, p.susp?'x':''
-    ]);
-    doc.autoTable({
-      head, body,
-      startY: yStart,
-      theme:'grid',
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [27,92,255] },
-      margin: { left: 40, right: 40 }
-    });
-    return doc.lastAutoTable.finalY || yStart;
-  }
-
-  let y = 70;
-  doc.setFontSize(12); doc.text('Csapat A', 40, y); y+=10;
-  y = teamTable('A', y+4) + 16;
-  doc.setFontSize(12); doc.text('Csapat B', 40, y); y+=10;
-  teamTable('B', y+4);
-
-  const d = (state.matchDate||'') || new Date().toISOString().slice(0,10);
-  const m = (state.matchName||'meccs').replace(/[^\w\d\- ]+/g,'_').slice(0,40);
-  doc.save(`kezistats_${d}_${m}.pdf`);
-}
-
-// --- gombok kötése ---
-document.getElementById('saveLocalBtn').onclick = saveToLocal;
-document.getElementById('openLocalBtn').onclick = openSavedPanel;
-document.getElementById('exportJsonBtn').onclick = exportJSON;
-document.getElementById('importJsonInput').onchange = (e)=> importJSON(e.target.files?.[0]);
-document.getElementById('exportXlsxBtn').onclick = exportXLSX;
-document.getElementById('exportPdfBtn').onclick  = exportPDF;
-
-// --- kis automentés: 2 percenként (nem tolakodó) ---
-setInterval(()=> {
-  try {
-    const key = makeStorageKey();
-    localStorage.setItem(key + "_autosave", JSON.stringify({ savedAt: Date.now(), data: snapshot() }));
-  } catch(_) {}
-}, 120000);
-</script>
-
-
 </head>
 <body>
 
@@ -321,6 +101,17 @@ setInterval(()=> {
     </div>
 
     <button class="btn" id="undoBtn"><span>↩</span><span id="undoLabel"> Visszavonás</span></button>
+
+    <!-- Mentés / megnyitás / export -->
+    <button class="btn" id="saveLocalBtn" title="Biztonsági mentés (helyi tároló)">💾 Mentés</button>
+    <button class="btn" id="openLocalBtn" title="Mentett meccsek megnyitása">📂 Megnyitás</button>
+    <button class="btn" id="exportJsonBtn" title="JSON export">JSON</button>
+    <label class="btn" title="JSON import">
+      ⬆ JSON
+      <input type="file" id="importJsonInput" accept="application/json" style="display:none">
+    </label>
+    <button class="btn" id="exportXlsxBtn" title="Excel export (XLSX)">XLSX</button>
+    <button class="btn" id="exportPdfBtn" title="PDF export">PDF</button>
   </div>
 </div>
 
@@ -355,7 +146,7 @@ setInterval(()=> {
           <thead>
             <tr>
               <th class="left sticky-col" style="width:240px">✓ # / Név (A)</th>
-              <th style="width:64px">ON</th>
+              <th style="width:90px">ON / 2P</th>
               <th style="width:70px">MIN</th>
               <th style="width:52px">Löv</th>
               <th style="width:52px">Gól</th>
@@ -412,7 +203,7 @@ setInterval(()=> {
           <thead>
             <tr>
               <th class="left sticky-col" style="width:240px">✓ # / Név (B)</th>
-              <th style="width:64px">ON</th>
+              <th style="width:90px">ON / 2P</th>
               <th style="width:70px">MIN</th>
               <th style="width:52px">Löv</th>
               <th style="width:52px">Gól</th>
@@ -442,6 +233,27 @@ setInterval(()=> {
   </div>
 </div>
 
+<!-- Mentett meccsek panel -->
+<div id="savedPanel" style="display:none; position:fixed; inset:10% 12%; background:#0f1218; border:1px solid #1f283a; border-radius:8px; z-index:999; padding:10px; overflow:auto">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+    <div style="font-weight:800">Mentett mérkőzések</div>
+    <button class="btn" id="savedCloseBtn">Bezár</button>
+  </div>
+  <div class="hint" style="margin-bottom:8px">Keresés: dátum / csapat / játékos</div>
+  <input id="savedSearch" placeholder="pl. 2025-09, Veszprém, Patrik" style="width:100%; padding:6px; border:1px solid #1f283a; border-radius:6px; background:#101522; color:#e6edf6; margin-bottom:8px">
+  <table style="width:100%; border-collapse:collapse">
+    <thead>
+      <tr style="background:#0f1218">
+        <th style="text-align:left; padding:6px; border-bottom:1px solid #1f283a">Dátum</th>
+        <th style="text-align:left; padding:6px; border-bottom:1px solid #1f283a">Mérkőzés</th>
+        <th style="text-align:left; padding:6px; border-bottom:1px solid #1f283a">Mentve ekkor</th>
+        <th style="padding:6px; border-bottom:1px solid #1f283a">Művelet</th>
+      </tr>
+    </thead>
+    <tbody id="savedBody"></tbody>
+  </table>
+</div>
+
 <script>
 /* ====== Segéd ====== */
 const $=id=>document.getElementById(id);
@@ -449,7 +261,7 @@ const toMMSS=s=>{s=Math.max(0,Math.floor(s));const m=Math.floor(s/60),ss=s%60;re
 const today=()=> new Date().toISOString().slice(0,10);
 
 /* ====== Állapot ====== */
-const MAXP=20, UNDO_LIMIT=40;
+const MAXP=20, UNDO_LIMIT=60;
 const emptyPlayer=()=>({active:true,num:"",name:"",shots:0,goals:0,p7a:0,p7g:0,th:0,bl:0,on:false,tocSec:0,susp:false});
 const emptyTeam =()=>({locked:false, players:Array.from({length:MAXP}, emptyPlayer)});
 let state={ matchName:"", matchDate:today(), tocMode:'simple', half:1, elapsed:0, A:emptyTeam(), B:emptyTeam() };
@@ -470,7 +282,7 @@ const ONE_VESZPREM=[
 ];
 
 /* ====== Undo ====== */
-function pushUndoTime(label, prev){undo.unshift({type:'time',label,prev}); if(undo.length>UNDO_LIMIT)undo.pop(); updateUndoUI();}
+function pushUndoTime(label, prevAbs){undo.unshift({type:'time',label,prevAbs}); if(undo.length>UNDO_LIMIT)undo.pop(); updateUndoUI();}
 function pushUndoToggle(label, side,i,field,prev){undo.unshift({type:'toggle',label,side,i,field,prev}); if(undo.length>UNDO_LIMIT)undo.pop(); updateUndoUI();}
 function pushUndoDelta(label, side,i,field,delta){undo.unshift({type:'delta',label,side,i,field,delta}); if(undo.length>UNDO_LIMIT)undo.pop(); updateUndoUI();}
 function updateUndoUI(){ const u=undo[0]; $('undoLabel').textContent=u?(' '+u.label):' Visszavonás'; $('undoBtn').disabled=!u; }
@@ -486,7 +298,7 @@ function displayTime(){
 function start(){ if(tmr) return; tmr=setInterval(tick,1000); }
 function pause(){ if(!tmr) return; clearInterval(tmr); tmr=null; }
 function tick(){
-  const limit = (state.half===1?30*60:30*60); // minden félidő 30 perc saját számlálóban
+  const limit = 30*60; // félidőnként 30 perc
   if(state.elapsed < limit) state.elapsed++;
   // TOC ketyegtetés
   ['A','B'].forEach(side=> state[side].players.forEach(p=>{
@@ -499,16 +311,16 @@ function tick(){
 function switchHalf(){
   pause();
   state.half = (state.half===1?2:1);
-  state.elapsed = 0; // új félidő saját 0-tól számol; kijelzőn 30:00..60:00 lesz
+  state.elapsed = 0;
   displayTime();
 }
 function shiftClock(sec){
-  const prevBase = (state.half===1?0:30*60) + state.elapsed;
-  const newAbs = Math.max(0, prevBase + sec);
-  const newHalf = newAbs<30*60 ? 1 : 2;
-  const newElapsed = newAbs - (newHalf===1?0:30*60);
-  pushUndoTime('Idő: '+(sec>0?'+':'')+sec+' mp', prevBase);
-  state.half=newHalf; state.elapsed=newElapsed; displayTime();
+  const prevAbs = (state.half===1?0:30*60) + state.elapsed;
+  const newAbs = Math.max(0, prevAbs + sec);
+  state.half = newAbs<30*60 ? 1 : 2;
+  state.elapsed = newAbs - (state.half===1?0:30*60);
+  pushUndoTime('Idő '+(sec>=0?'+':'')+sec+' mp', prevAbs);
+  displayTime();
 }
 function setClockAbs(mmss){
   const m=mmss.match(/^(\d{1,2}):([0-5]\d)$/); if(!m) return alert('Formátum: MM:SS');
@@ -571,6 +383,9 @@ function renderTeam(side){
 function renderTeams(){ renderTeam('A'); renderTeam('B'); }
 
 /* ====== Események ====== */
+$('matchName').addEventListener('input', e=> state.matchName=e.target.value);
+$('matchDate').addEventListener('input', e=> state.matchDate=e.target.value);
+
 $('startBtn').addEventListener('click', start);
 $('pauseBtn').addEventListener('click', pause);
 $('switchHalfBtn').addEventListener('click', switchHalf);
@@ -625,7 +440,7 @@ $('vzLoadB').addEventListener('click', ()=>{ if($('vzB').checked) loadVeszpremIn
 
 $('undoBtn').addEventListener('click', ()=>{
   const u=undo.shift(); if(!u) return;
-  if(u.type==='time'){ const abs=u.prev; state.half = abs<30*60?1:2; state.elapsed = abs - (state.half===1?0:30*60); displayTime(); }
+  if(u.type==='time'){ const abs=u.prevAbs; state.half = abs<30*60?1:2; state.elapsed = abs - (state.half===1?0:30*60); displayTime(); }
   else if(u.type==='toggle'){ const p=state[u.side].players[u.i]; if(p) { p[u.field]=u.prev; renderTeams(); } }
   else if(u.type==='delta'){ const p=state[u.side].players[u.i]; if(!p) return;
     if(u.field==='_goal'){ p.goals=Math.max(0,p.goals+u.delta); p.shots=Math.max(0,p.shots+u.delta); }
@@ -637,17 +452,200 @@ $('undoBtn').addEventListener('click', ()=>{
   updateUndoUI();
 });
 
-/* ====== Init ====== */
-function init(){
-  $('matchDate').value = state.matchDate;
-  populatePicker('A'); populatePicker('B');
-  renderTeams(); displayTime(); updateUndoUI();
-}
-init();
-</script>
+/* ====== Mentés / export / visszaállítás ====== */
+const STORAGE_KEY_PREFIX = "kezistats_v5_";
 
+function snapshot(){ return JSON.parse(JSON.stringify(state)); }
+function applySnapshot(snap){ if(!snap) return; pause(); state=snap; selectedRow={A:null,B:null}; renderTeams(); displayTime(); updateUndoUI(); }
+function makeStorageKey(){
+  const d=(state.matchDate||'').trim() || new Date().toISOString().slice(0,10);
+  const m=(state.matchName||'Ismeretlen meccs').trim();
+  return STORAGE_KEY_PREFIX + d + "___" + m;
+}
+function saveToLocal(){
+  const key=makeStorageKey();
+  localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data: snapshot() }));
+  alert("Elmentve: " + key.replace(STORAGE_KEY_PREFIX,''));
+}
+function loadAllKeys(){
+  const keys=[];
+  for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && k.startsWith(STORAGE_KEY_PREFIX)) keys.push(k); }
+  keys.sort((a,b)=>{
+    const A = JSON.parse(localStorage.getItem(a)||'{}')?.savedAt || 0;
+    const B = JSON.parse(localStorage.getItem(b)||'{}')?.savedAt || 0;
+    return B - A;
+  });
+  return keys;
+}
+function openSavedPanel(){
+  const body=document.getElementById('savedBody'); body.innerHTML="";
+  loadAllKeys().forEach(k=>{
+    const rec=JSON.parse(localStorage.getItem(k)||'{}');
+    const when = new Date(rec.savedAt||Date.now()).toLocaleString();
+    const [date, name] = k.replace(STORAGE_KEY_PREFIX,'').split('___');
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:6px; border-bottom:1px solid #1f283a">${date||''}</td>
+      <td style="padding:6px; border-bottom:1px solid #1f283a">${name||''}</td>
+      <td style="padding:6px; border-bottom:1px solid #1f283a; color:#94a3b8">${when}</td>
+      <td style="padding:6px; border-bottom:1px solid #1f283a">
+        <button class="btn" data-open="${k}">Megnyit</button>
+        <button class="btn dan" data-del="${k}">Töröl</button>
+      </td>`;
+    body.appendChild(tr);
+  });
+  document.querySelectorAll('[data-open]').forEach(b=> b.onclick=()=>{ const k=b.getAttribute('data-open'); const rec=JSON.parse(localStorage.getItem(k)||'{}'); applySnapshot(rec.data); document.getElementById('savedPanel').style.display='none'; });
+  document.querySelectorAll('[data-del]').forEach(b=> b.onclick=()=>{ const k=b.getAttribute('data-del'); if(confirm("Biztosan törlöd?")){ localStorage.removeItem(k); openSavedPanel(); } });
+  document.getElementById('savedPanel').style.display='block';
+  document.getElementById('savedSearch').value='';
+}
+document.getElementById('savedCloseBtn').onclick=()=> document.getElementById('savedPanel').style.display='none';
+document.getElementById('savedSearch').addEventListener('input', e=>{
+  const q=e.target.value.toLowerCase();
+  document.querySelectorAll('#savedBody tr').forEach(r=> r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none');
+});
+
+// JSON export/import
+function exportJSON(){
+  const dataStr = "data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify(snapshot(), null, 2));
+  const a=document.createElement('a');
+  const d=(state.matchDate||'') || new Date().toISOString().slice(0,10);
+  const m=(state.matchName||'meccs').replace(/[^\w\d\- ]+/g,'_').slice(0,40);
+  a.href=dataStr; a.download=`kezistats_${d}_${m}.json`; document.body.appendChild(a); a.click(); a.remove();
+}
+function importJSON(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=(e)=>{ try{ const obj=JSON.parse(e.target.result); applySnapshot(obj); }catch(_){ alert("Érvénytelen JSON"); } };
+  reader.readAsText(file);
+}
+
+// --- XLSX export ---
+function exportXLSX() {
+  if (typeof XLSX === 'undefined') {
+    alert("XLSX könyvtár nem elérhető.");
+    return;
+  }
+
+  function teamSheet(side) {
+    const team = state[side].players.map((p, i) => ({
+      Sorszám: i + 1,
+      Nevezett: p.active ? 1 : 0,
+      Mez: p.num || '',
+      Név: p.name || '',
+      ON: p.on ? 1 : 0,
+      MIN: toMMSS(p.tocSec || 0),
+      Lövés: p.shots || 0,
+      Gól: p.goals || 0,
+      "%": (p.shots ? Math.round(p.goals / p.shots * 100) : 0) + "%",
+      "7A": p.p7a || 0,
+      "7G": p.p7g || 0,
+      "7%": (p.p7a ? Math.round(p.p7g / p.p7a * 100) : 0) + "%",
+      TH: p.th || 0,
+      BL: p.bl || 0,
+      "2P": p.susp ? 1 : 0
+    }));
+    return XLSX.utils.json_to_sheet(team);
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, teamSheet('A'), "Csapat A");
+  XLSX.utils.book_append_sheet(wb, teamSheet('B'), "Csapat B");
+
+  // meta lap
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.json_to_sheet([{
+      Meccs: state.matchName || '',
+      Dátum: state.matchDate || '',
+      Félidő: state.half,
+      Idő: (state.half === 1 ? '' : '30:') + toMMSS(state.elapsed)
+    }]),
+    "Meta"
+  );
+
+  const d = (state.matchDate || '') || new Date().toISOString().slice(0, 10);
+  const m = (state.matchName || 'meccs')
+              .replace(/[^\w\d\- ]+/g, '_')
+              .slice(0, 40);
+
+  XLSX.writeFile(wb, `kezistats_${d}_${m}.xlsx`);
+}
+
+// --- PDF export ---
+async function exportPDF() {
+  if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') {
+    alert("jsPDF könyvtár nem elérhető.");
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('l', 'pt', 'a4'); // fekvő A4
+  const title = `Kézilabda stat – ${state.matchName || ''}  (${state.matchDate || ''})`;
+  doc.setFontSize(14);
+  doc.text(title, 40, 40);
+
+  function teamTable(side, yStart) {
+    const head = [['#','Név','ON','MIN','Löv','Gól','%','7A','7G','7%','TH','BL','2P']];
+    const body = state[side].players.map((p,i)=>[
+      p.num||'',
+      p.name||'',
+      p.on?'ON':'OFF',
+      toMMSS(p.tocSec||0),
+      p.shots||0,
+      p.goals||0,
+      (p.shots? Math.round(p.goals/p.shots*100):0)+'%',
+      p.p7a||0,
+      p.p7g||0,
+      (p.p7a? Math.round(p.p7g/p.p7a*100):0)+'%',
+      p.th||0,
+      p.bl||0,
+      p.susp?'x':''
+    ]);
+    doc.autoTable({
+      head, body,
+      startY: yStart,
+      theme:'grid',
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [27,92,255] },
+      margin: { left: 40, right: 40 }
+    });
+    return doc.lastAutoTable.finalY || yStart;
+  }
+
+  let y = 70;
+  doc.setFontSize(12);
+  doc.text('Csapat A', 40, y);
+  y += 10;
+  y = teamTable('A', y+4) + 16;
+
+  doc.setFontSize(12);
+  doc.text('Csapat B', 40, y);
+  y += 10;
+  teamTable('B', y+4);
+
+  const d = (state.matchDate || '') || new Date().toISOString().slice(0,10);
+  const m = (state.matchName || 'meccs')
+              .replace(/[^\w\d\- ]+/g,'_')
+              .slice(0,40);
+  doc.save(`kezistats_${d}_${m}.pdf`);
+}
+
+// --- gombok kötése ---
+document.getElementById('saveLocalBtn').onclick = saveToLocal;
+document.getElementById('openLocalBtn').onclick = openSavedPanel;
+document.getElementById('exportJsonBtn').onclick = exportJSON;
+document.getElementById('importJsonInput').onchange = (e)=> importJSON(e.target.files?.[0]);
+document.getElementById('exportXlsxBtn').onclick = exportXLSX;
+document.getElementById('exportPdfBtn').onclick  = exportPDF;
+
+// --- kis automentés: 2 percenként (nem tolakodó) ---
+setInterval(()=> {
+  try {
+    const key = makeStorageKey();
+    localStorage.setItem(key + "_autosave", JSON.stringify({ savedAt: Date.now(), data: snapshot() }));
+  } catch(_) {}
+}, 120000);
+</script>
 </body>
 </html>
-"""
-open('/mnt/data/masolas.txt','w',encoding='utf-8').write(html)
-print("OK - /mnt/data/masolas.txt frissítve a teljes helyreállított programmal.")
+
