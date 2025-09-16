@@ -57,6 +57,233 @@ html = r"""<!DOCTYPE html>
   .time-edit input{width:64px;text-align:center;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);padding:2px 4px}
   .veszprem-bar{display:flex;gap:6px;align-items:center;margin:6px 8px 0}
 </style>
+  <!-- Exportáláshoz szükséges könyvtárak -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.1/dist/jspdf.plugin.autotable.min.js"></script>
+  <script>
+// ==== Mentés / export / visszaállítás ====
+
+const STORAGE_KEY_PREFIX = "kezistats_v5_";
+
+function snapshot() {
+  // A jelenlegi state-ből menthető pillanatkép (mély másolat)
+  return JSON.parse(JSON.stringify(state));
+}
+
+function applySnapshot(snap) {
+  if (!snap) return;
+  pause();
+  state = snap;            // teljes visszaállítás
+  selectedRow = {A:null,B:null}; // kijelölés ürítése
+  renderTeams();
+  displayTime();
+  updateUndoUI();
+  <button class="btn" id="saveLocalBtn" title="Biztonsági mentés (helyi tároló)">💾 Mentés</button>
+<button class="btn" id="openLocalBtn" title="Mentett meccsek megnyitása">📂 Megnyitás</button>
+<button class="btn" id="exportJsonBtn" title="JSON export">JSON</button>
+<label class="btn" title="JSON import">
+  ⬆ JSON
+  <input type="file" id="importJsonInput" accept="application/json" style="display:none">
+</label>
+<button class="btn" id="exportXlsxBtn" title="Excel export (XLSX)">XLSX</button>
+<button class="btn" id="exportPdfBtn" title="PDF export">PDF</button>
+
+}
+
+function makeStorageKey() {
+  const d = (state.matchDate || '').trim() || new Date().toISOString().slice(0,10);
+  const m = (state.matchName || '').trim() || 'Ismeretlen meccs';
+  return STORAGE_KEY_PREFIX + d + "___" + m;
+}
+
+function saveToLocal() {
+  const key = makeStorageKey();
+  const data = snapshot();
+  localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data }));
+  alert("Elmentve: " + key.replace(STORAGE_KEY_PREFIX, ''));
+}
+
+function loadAllKeys() {
+  const keys = [];
+  for (let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if (k && k.startsWith(STORAGE_KEY_PREFIX)) keys.push(k);
+  }
+  // legutóbbi felül
+  keys.sort((a,b)=> {
+    const A = JSON.parse(localStorage.getItem(a)||'{}')?.savedAt || 0;
+    const B = JSON.parse(localStorage.getItem(b)||'{}')?.savedAt || 0;
+    return B - A;
+  });
+  return keys;
+}
+
+function openSavedPanel() {
+  const body = document.getElementById('savedBody');
+  body.innerHTML = "";
+  loadAllKeys().forEach(k=>{
+    const rec = JSON.parse(localStorage.getItem(k) || "{}");
+    const when = new Date(rec.savedAt || Date.now()).toLocaleString();
+    const parts = k.replace(STORAGE_KEY_PREFIX,'').split('___');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:6px; border-bottom:1px solid #1f283a">${parts[0]||''}</td>
+      <td style="padding:6px; border-bottom:1f283a">${parts[1]||''}</td>
+      <td style="padding:6px; border-bottom:1px solid #1f283a; color:#94a3b8">${when}</td>
+      <td style="padding:6px; border-bottom:1px solid #1f283a">
+        <button class="btn btn-small" data-open="${k}">Megnyit</button>
+        <button class="btn btn-small dan" data-del="${k}">Töröl</button>
+      </td>
+    `.replace('1f283a','1px solid #1f283a'); // kis trükk, hogy ne húzza össze a böngésző editor
+    body.appendChild(tr);
+  });
+
+  document.querySelectorAll('[data-open]').forEach(b=>{
+    b.onclick = () => {
+      const k     = b.getAttribute('data-open');
+      const rec   = JSON.parse(localStorage.getItem(k)||'{}');
+      applySnapshot(rec.data);
+      document.getElementById('savedPanel').style.display='none';
+    };
+  });
+  document.querySelectorAll('[data-del]').forEach(b=>{
+    b.onclick = () => {
+      const k = b.getAttribute('data-del');
+      if (confirm("Biztosan törlöd?")) {
+        localStorage.removeItem(k);
+        openSavedPanel();
+      }
+    };
+  });
+
+  document.getElementById('savedPanel').style.display='block';
+  document.getElementById('savedSearch').value = '';
+}
+
+document.getElementById('savedSearch').addEventListener('input', (e)=>{
+  const q = e.target.value.toLowerCase();
+  const rows = document.querySelectorAll('#savedBody tr');
+  rows.forEach(r=>{
+    r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+
+document.getElementById('savedCloseBtn').onclick = ()=> document.getElementById('savedPanel').style.display='none';
+
+// --- JSON export/import ---
+function exportJSON() {
+  const dataStr = "data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify(snapshot(), null, 2));
+  const a = document.createElement('a');
+  const d = (state.matchDate||'') || new Date().toISOString().slice(0,10);
+  const m = (state.matchName||'meccs').replace(/[^\w\d\- ]+/g,'_').slice(0,40);
+  a.setAttribute("href", dataStr);
+  a.setAttribute("download", `kezistats_${d}_${m}.json`);
+  document.body.appendChild(a);
+  a.click(); a.remove();
+}
+
+function importJSON(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try {
+      const obj = JSON.parse(e.target.result);
+      applySnapshot(obj);
+    } catch(err){
+      alert("Érvénytelen JSON.");
+    }
+  };
+  reader.readAsText(file);
+}
+
+// --- XLSX export ---
+function exportXLSX() {
+  if (typeof XLSX === 'undefined') { alert("XLSX könyvtár nem elérhető."); return; }
+  function teamSheet(side){
+    const team = state[side].players.map((p,i)=>({
+      Sorszám: i+1,
+      Nevezett: p.active?1:0,
+      Mez: p.num||'',
+      Név: p.name||'',
+      ON: p.on?1:0,
+      MIN: toMMSS(p.tocSec||0),
+      Lövés: p.shots||0,
+      Gól: p.goals||0,
+      '%': (p.shots? Math.round(p.goals/p.shots*100):0) + '%',
+      '7A': p.p7a||0,
+      '7G': p.p7g||0,
+      '7%': (p.p7a? Math.round(p.p7g/p.p7a*100):0) + '%',
+      TH: p.th||0,
+      BL: p.bl||0,
+      '2P': p.susp?1:0
+    }));
+    return XLSX.utils.json_to_sheet(team);
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, teamSheet('A'), "Csapat A");
+  XLSX.utils.book_append_sheet(wb, teamSheet('B'), "Csapat B");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{Meccs: state.matchName||'', Dátum: state.matchDate||'', Félidő: state.half, Idő: (state.half===1?'':'30:') + toMMSS(state.elapsed)}]), "Meta");
+  const d = (state.matchDate||'') || new Date().toISOString().slice(0,10);
+  const m = (state.matchName||'meccs').replace(/[^\w\d\- ]+/g,'_').slice(0,40);
+  XLSX.writeFile(wb, `kezistats_${d}_${m}.xlsx`);
+}
+
+// --- PDF export ---
+async function exportPDF() {
+  if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') { alert("jsPDF könyvtár nem elérhető."); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('l', 'pt', 'a4'); // fekvő A4
+  const title = `Kézilabda stat – ${state.matchName||''}  (${state.matchDate||''})`;
+  doc.setFontSize(14); doc.text(title, 40, 40);
+
+  function teamTable(side, yStart){
+    const head = [['#','Név','ON','MIN','Löv','Gól','%','7A','7G','7%','TH','BL','2P']];
+    const body = state[side].players.map((p,i)=>[
+      p.num||'', p.name||'', p.on?'ON':'OFF', toMMSS(p.tocSec||0), p.shots||0, p.goals||0,
+      (p.shots? Math.round(p.goals/p.shots*100):0)+'%',
+      p.p7a||0, p.p7g||0, (p.p7a? Math.round(p.p7g/p.p7a*100):0)+'%', p.th||0, p.bl||0, p.susp?'x':''
+    ]);
+    doc.autoTable({
+      head, body,
+      startY: yStart,
+      theme:'grid',
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [27,92,255] },
+      margin: { left: 40, right: 40 }
+    });
+    return doc.lastAutoTable.finalY || yStart;
+  }
+
+  let y = 70;
+  doc.setFontSize(12); doc.text('Csapat A', 40, y); y+=10;
+  y = teamTable('A', y+4) + 16;
+  doc.setFontSize(12); doc.text('Csapat B', 40, y); y+=10;
+  teamTable('B', y+4);
+
+  const d = (state.matchDate||'') || new Date().toISOString().slice(0,10);
+  const m = (state.matchName||'meccs').replace(/[^\w\d\- ]+/g,'_').slice(0,40);
+  doc.save(`kezistats_${d}_${m}.pdf`);
+}
+
+// --- gombok kötése ---
+document.getElementById('saveLocalBtn').onclick = saveToLocal;
+document.getElementById('openLocalBtn').onclick = openSavedPanel;
+document.getElementById('exportJsonBtn').onclick = exportJSON;
+document.getElementById('importJsonInput').onchange = (e)=> importJSON(e.target.files?.[0]);
+document.getElementById('exportXlsxBtn').onclick = exportXLSX;
+document.getElementById('exportPdfBtn').onclick  = exportPDF;
+
+// --- kis automentés: 2 percenként (nem tolakodó) ---
+setInterval(()=> {
+  try {
+    const key = makeStorageKey();
+    localStorage.setItem(key + "_autosave", JSON.stringify({ savedAt: Date.now(), data: snapshot() }));
+  } catch(_) {}
+}, 120000);
+</script>
+
+
 </head>
 <body>
 
