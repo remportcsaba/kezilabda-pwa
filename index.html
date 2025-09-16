@@ -60,6 +60,12 @@
   .sticky-col{ position:sticky; left:0; z-index:1; background:var(--card); }
   .sticky-col::after{ content:""; position:absolute; right:-1px; top:0; bottom:0; width:1px; background:var(--border); }
 
+  .playcell{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .play-toggle{ width:22px; height:22px; border-radius:50%; border:1px solid var(--border);
+                background:var(--panel); color:var(--text); cursor:pointer; font-size:12px; line-height:1; }
+  .play-toggle.on{ background:var(--accent2); color:#fff; }
+  .playtime{ font-variant-numeric:tabular-nums; font-size:10px; }
+
   .density-cozy table{ font-size:11px; }
   .density-compact table{ font-size:10.5px; }
   .density-ultra table{ font-size:9.8px; }
@@ -184,6 +190,7 @@
             <thead>
               <tr>
                 <th class="left sticky-col" style="width:220px">✓ # / Név (A)</th>
+                <th style="width:70px">Pálya</th>
                 <th style="width:52px">Löv</th>
                 <th style="width:52px">Gól</th>
                 <th style="width:44px">%</th>
@@ -198,6 +205,7 @@
             <tfoot>
               <tr>
                 <td class="left sticky-col">Összesen (nevezettek)</td>
+                <td id="aPlayTime">00:00</td>
                 <td id="aShots">0</td>
                 <td id="aGoals">0</td>
                 <td id="aPct">0%</td>
@@ -236,6 +244,7 @@
             <thead>
               <tr>
                 <th class="left sticky-col" style="width:220px">✓ # / Név (B)</th>
+                <th style="width:70px">Pálya</th>
                 <th style="width:52px">Löv</th>
                 <th style="width:52px">Gól</th>
                 <th style="width:44px">%</th>
@@ -250,6 +259,7 @@
             <tfoot>
               <tr>
                 <td class="left sticky-col">Összesen (nevezettek)</td>
+                <td id="bPlayTime">00:00</td>
                 <td id="bShots">0</td>
                 <td id="bGoals">0</td>
                 <td id="bPct">0%</td>
@@ -297,10 +307,25 @@ const LS_TEAMS   = 'hb_dual_v4_teams';
 
 const $ = (id)=>document.getElementById(id);
 const pct=(n,d)=> d? (Math.round((n/d*1000))/10).toFixed(1)+"%":"0%";
+const formatDuration=(sec)=>{
+  const total = Math.max(0, Math.floor(Number(sec)||0));
+  const h=Math.floor(total/3600);
+  const m=Math.floor((total%3600)/60);
+  const s=total%60;
+  if(h>0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+};
 
 /* ====== ALAP ÁLLAPOT ====== */
-const emptyPlayer = ()=>({active:true,num:"",name:"",shots:0,goals:0,p7a:0,p7g:0,th:0,bl:0});
+const emptyPlayer = ()=>({active:true,num:"",name:"",shots:0,goals:0,p7a:0,p7g:0,th:0,bl:0,onCourt:false,timeOnCourt:0});
 const emptyTeam = ()=>({locked:false, name:"", logo:"", players:Array.from({length:MAXP}, emptyPlayer)});
+
+const normalizePlayer = (p)=>{
+  const merged = {...emptyPlayer(), ...p};
+  merged.onCourt = !!merged.onCourt;
+  merged.timeOnCourt = Number.isFinite(merged.timeOnCourt) ? Math.max(0, Math.floor(merged.timeOnCourt)) : 0;
+  return merged;
+};
 
 let state = JSON.parse(localStorage.getItem(LS_STATE)) || {
   matchName:"", matchDate: todayStr(), currentHalf:1, remainingSeconds:30*60,
@@ -369,7 +394,8 @@ function totals(team){
   const p7g  =on.reduce((a,p)=>a+p.p7g,0);
   const th   =on.reduce((a,p)=>a+p.th,0);
   const bl   =on.reduce((a,p)=>a+p.bl,0);
-  return {shots,goals,p7a,p7g,th,bl};
+  const playTime = on.reduce((a,p)=>a+(p.timeOnCourt||0),0);
+  return {shots,goals,p7a,p7g,th,bl,playTime};
 }
 function addCellTD(val, onPlus){
   const td=document.createElement('td'); td.textContent=val; td.style.cursor='pointer'; td.title='+1';
@@ -382,49 +408,68 @@ function renderTeam(side){
   body.innerHTML="";
 
   team.players.forEach((p,i)=>{
+    const player = normalizePlayer(p);
+    team.players[i] = player;
     const tr=document.createElement('tr');
-    if(!p.active) tr.classList.add('inactive');
+    if(!player.active) tr.classList.add('inactive');
 
     // first col: checkbox + # + name
     const td=document.createElement('td'); td.className='left sticky-col';
     if(team.locked){
       td.innerHTML = `
         <div class="namecell">
-          <input type="checkbox" class="enroll" ${p.active?'checked':''} data-side="${side}" data-i="${i}">
-          <span style="width:2.6rem;display:inline-block;text-align:center;">${p.num||""}</span>
-          <span style="flex:1;min-width:80px;overflow:hidden;text-overflow:ellipsis">${p.name||""}</span>
+          <input type="checkbox" class="enroll" ${player.active?'checked':''} data-side="${side}" data-i="${i}">
+          <span style="width:2.6rem;display:inline-block;text-align:center;">${player.num||""}</span>
+          <span style="flex:1;min-width:80px;overflow:hidden;text-overflow:ellipsis">${player.name||""}</span>
         </div>`;
       td.querySelector('.enroll').addEventListener('change',(e)=>{
-        p.active=e.target.checked; updateScore(); saveAll(); renderTeam(side);
+        player.active=e.target.checked; updateScore(); saveAll(); renderTeam(side);
       });
     }else{
       const wrap=document.createElement('div'); wrap.className='namecell';
-      const chk=document.createElement('input'); chk.type='checkbox'; chk.className='enroll'; chk.checked=p.active;
-      chk.addEventListener('change',()=>{ p.active=chk.checked; updateScore(); saveAll(); renderTeam(side); });
-      const num=document.createElement('input'); num.className='num'; num.placeholder='#'; num.value=p.num;
-      const name=document.createElement('input'); name.className='name'; name.placeholder='Név'; name.value=p.name;
-      num.addEventListener('input',()=>{ p.num=num.value; populatePicker(side); saveAll(); });
-      name.addEventListener('input',()=>{ p.name=name.value; populatePicker(side); saveAll(); });
+      const chk=document.createElement('input'); chk.type='checkbox'; chk.className='enroll'; chk.checked=player.active;
+      chk.addEventListener('change',()=>{ player.active=chk.checked; updateScore(); saveAll(); renderTeam(side); });
+      const num=document.createElement('input'); num.className='num'; num.placeholder='#'; num.value=player.num;
+      const name=document.createElement('input'); name.className='name'; name.placeholder='Név'; name.value=player.name;
+      num.addEventListener('input',()=>{ player.num=num.value; populatePicker(side); saveAll(); });
+      name.addEventListener('input',()=>{ player.name=name.value; populatePicker(side); saveAll(); });
       wrap.append(chk,num,name); td.appendChild(wrap);
     }
     tr.appendChild(td);
 
+    const playTd=document.createElement('td'); playTd.className='playcell';
+    const playBtn=document.createElement('button');
+    playBtn.type='button';
+    playBtn.className='play-toggle'+(player.onCourt?' on':'');
+    playBtn.textContent=player.onCourt?'⬤':'○';
+    playBtn.title = player.onCourt ? 'Le a pályáról' : 'Pályára lép';
+    playBtn.setAttribute('aria-pressed', player.onCourt ? 'true' : 'false');
+    playBtn.setAttribute('aria-label', player.onCourt ? 'Le a pályáról' : 'Pályára lép');
+    playBtn.addEventListener('click',()=>{ toggleOnCourt(side,i); });
+    const timeSpan=document.createElement('div');
+    timeSpan.className='playtime';
+    timeSpan.id=`time_${side}_${i}`;
+    timeSpan.textContent=formatDuration(player.timeOnCourt);
+    playTd.append(playBtn,timeSpan);
+    tr.appendChild(playTd);
+
     const addAndRerender = (fn)=>()=>{ fn(); renderTeam(side); updateScore(); saveAll(); };
 
-    tr.appendChild(addCellTD(p.shots, addAndRerender(()=>{ p.shots++; pushUndo(side,i,'shots',-1,`Lövés: ${side} #${p.num||i+1} ${p.name||''}`); })));
-    tr.appendChild(addCellTD(p.goals, addAndRerender(()=>{ p.goals++; p.shots++; pushUndo(side,i,'combo_goal',-1,`Gól: ${side} #${p.num||i+1} ${p.name||''}`); })));
-    const tdPct=document.createElement('td'); tdPct.textContent=pct(p.goals,p.shots); tr.appendChild(tdPct);
-    tr.appendChild(addCellTD(p.p7a,  addAndRerender(()=>{ p.p7a++; p.shots++; pushUndo(side,i,'combo_7a',-1,`7A: ${side} #${p.num||i+1} ${p.name||''}`); })));
-    tr.appendChild(addCellTD(p.p7g,  addAndRerender(()=>{ p.p7g++; p.p7a++; p.shots++; p.goals++; pushUndo(side,i,'combo_7g',-1,`7G: ${side} #${p.num||i+1} ${p.name||''}`); })));
-    const td7p=document.createElement('td'); td7p.textContent=pct(p.p7g,p.p7a); tr.appendChild(td7p);
-    tr.appendChild(addCellTD(p.th,   addAndRerender(()=>{ p.th++; pushUndo(side,i,'th',-1,`TH: ${side} #${p.num||i+1} ${p.name||''}`); })));
-    tr.appendChild(addCellTD(p.bl,   addAndRerender(()=>{ p.bl++; pushUndo(side,i,'bl',-1,`BL: ${side} #${p.num||i+1} ${p.name||''}`); })));
+    tr.appendChild(addCellTD(player.shots, addAndRerender(()=>{ player.shots++; pushUndo(side,i,'shots',-1,`Lövés: ${side} #${player.num||i+1} ${player.name||''}`); })));
+    tr.appendChild(addCellTD(player.goals, addAndRerender(()=>{ player.goals++; player.shots++; pushUndo(side,i,'combo_goal',-1,`Gól: ${side} #${player.num||i+1} ${player.name||''}`); })));
+    const tdPct=document.createElement('td'); tdPct.textContent=pct(player.goals,player.shots); tr.appendChild(tdPct);
+    tr.appendChild(addCellTD(player.p7a,  addAndRerender(()=>{ player.p7a++; player.shots++; pushUndo(side,i,'combo_7a',-1,`7A: ${side} #${player.num||i+1} ${player.name||''}`); })));
+    tr.appendChild(addCellTD(player.p7g,  addAndRerender(()=>{ player.p7g++; player.p7a++; player.shots++; player.goals++; pushUndo(side,i,'combo_7g',-1,`7G: ${side} #${player.num||i+1} ${player.name||''}`); })));
+    const td7p=document.createElement('td'); td7p.textContent=pct(player.p7g,player.p7a); tr.appendChild(td7p);
+    tr.appendChild(addCellTD(player.th,   addAndRerender(()=>{ player.th++; pushUndo(side,i,'th',-1,`TH: ${side} #${player.num||i+1} ${player.name||''}`); })));
+    tr.appendChild(addCellTD(player.bl,   addAndRerender(()=>{ player.bl++; pushUndo(side,i,'bl',-1,`BL: ${side} #${player.num||i+1} ${player.name||''}`); })));
 
     body.appendChild(tr);
   });
 
   // totals
   const t=totals(team);
+  (side==='A'?$('aPlayTime'):$('bPlayTime')).textContent=formatDuration(t.playTime);
   (side==='A'?$('aShots'):$('bShots')).textContent=t.shots;
   (side==='A'?$('aGoals'):$('bGoals')).textContent=t.goals;
   (side==='A'?$('aPct')  :$('bPct')).textContent=pct(t.goals,t.shots);
@@ -436,6 +481,15 @@ function renderTeam(side){
 
   populatePicker(side);
   (side==='A'?$('lockA'):$('lockB')).textContent = team.locked ? 'Névjegyzék felold' : 'Névjegyzék lezár';
+}
+
+function toggleOnCourt(side,index){
+  const team = state[side];
+  const player = team.players[index];
+  if(!player) return;
+  player.onCourt = !player.onCourt;
+  saveAll();
+  renderTeam(side);
 }
 
 /* ====== PICKEREK & SELECT ALL ====== */
@@ -462,13 +516,45 @@ function updateScore(){
   $('scoreBoard').textContent=`${a} : ${b}`;
 }
 
+function incrementOnCourt(sec){
+  ['A','B'].forEach(side=>{
+    const team=state[side];
+    let total=0;
+    team.players.forEach((p,i)=>{
+      if(p.onCourt){
+        p.timeOnCourt = Math.max(0, (p.timeOnCourt||0) + sec);
+        const span=document.getElementById(`time_${side}_${i}`);
+        if(span) span.textContent=formatDuration(p.timeOnCourt);
+      }
+      if(p.active) total += p.timeOnCourt||0;
+    });
+    const totalCell = side==='A'?$('aPlayTime'):$('bPlayTime');
+    if(totalCell) totalCell.textContent = formatDuration(total);
+  });
+}
+
 /* ====== ÓRA + HOSSZABBÍTÁS ====== */
 let tmr=null;
 function updateClock(){
   const m=Math.floor(state.remainingSeconds/60), s=state.remainingSeconds%60;
   $('clock').textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
-function start(){ if(tmr) return; tmr=setInterval(()=>{ state.remainingSeconds=Math.max(0,state.remainingSeconds-1); updateClock(); if(state.remainingSeconds===0){ pause(); alert((state.currentHalf===1?"1.":"2.")+" félidő vége"); } saveAll(); },1000); }
+function tickClock(){
+  if(state.remainingSeconds<=0){
+    pause();
+    alert((state.currentHalf===1?"1.":"2.")+" félidő vége");
+    return;
+  }
+  state.remainingSeconds=Math.max(0,state.remainingSeconds-1);
+  incrementOnCourt(1);
+  updateClock();
+  saveAll();
+  if(state.remainingSeconds===0){
+    pause();
+    alert((state.currentHalf===1?"1.":"2.")+" félidő vége");
+  }
+}
+function start(){ if(tmr || state.remainingSeconds<=0) return; tmr=setInterval(tickClock,1000); }
 function pause(){ if(!tmr) return; clearInterval(tmr); tmr=null; }
 function reset30(){ pause(); state.remainingSeconds=30*60; updateClock(); saveAll(); }
 function addExtra(sec){ state.remainingSeconds += sec; if(state.remainingSeconds<0) state.remainingSeconds=0; updateClock(); saveAll(); }
@@ -592,15 +678,25 @@ $('matchesTable').addEventListener('click', (e)=>{
 /* ====== EXPORT: EXCEL / PDF ====== */
 function teamRowsForExport(team){
   return team.players.filter(p=>p.active).map(p=>[
-    p.num, p.name, p.shots, p.goals, pct(p.goals,p.shots), p.p7a, p.p7g, pct(p.p7g,p.p7a), p.th, p.bl
+    p.num,
+    p.name,
+    formatDuration(p.timeOnCourt||0),
+    p.shots,
+    p.goals,
+    pct(p.goals,p.shots),
+    p.p7a,
+    p.p7g,
+    pct(p.p7g,p.p7a),
+    p.th,
+    p.bl
   ]);
 }
 function exportExcel(){
-  const header = ["#", "Név", "Löv", "Gól", "%", "7A", "7G", "7%", "TH", "BL"];
+  const header = ["#", "Név", "Pálya", "Löv", "Gól", "%", "7A", "7G", "7%", "TH", "BL"];
   const wsData = [];
 
-  wsData.push([state.matchName||"", "", "", "", "", "", "", "", "", ""]);
-  wsData.push([state.matchDate||todayStr(), "", "", "", "", "", "", "", "", ""]);
+  wsData.push([state.matchName||"", "", "", "", "", "", "", "", "", "", ""]);
+  wsData.push([state.matchDate||todayStr(), "", "", "", "", "", "", "", "", "", ""]);
   wsData.push([]);
 
   // A blokk
@@ -637,7 +733,7 @@ function exportPDF(){
   doc.setFontSize(14);
   doc.text(`${title}  (${date})`, 10, 10);
 
-  const head = [["#", "Név", "Löv", "Gól", "%", "7A", "7G", "7%", "TH", "BL"]];
+  const head = [["#", "Név", "Pálya", "Löv", "Gól", "%", "7A", "7G", "7%", "TH", "BL"]];
   const rowsA = teamRowsForExport(state.A);
 
   // Bal táblázat (A)
@@ -703,7 +799,10 @@ $('undoBtn').addEventListener('click', ()=>{
 $('hardResetBtn').addEventListener('click', ()=>{
   if(!confirm("Biztosan törlöd a statokat erre a mérkőzésre? (Nevezések és nevek megmaradnak)")) return;
   ['A','B'].forEach(side=>{
-    state[side].players.forEach(p=>{ p.shots=0; p.goals=0; p.p7a=0; p.p7g=0; p.th=0; p.bl=0; });
+    state[side].players.forEach(p=>{
+      p.shots=0; p.goals=0; p.p7a=0; p.p7g=0; p.th=0; p.bl=0;
+      p.timeOnCourt=0; p.onCourt=false;
+    });
   });
   undoStack = [];
   renderAll(); saveAll();
@@ -726,9 +825,11 @@ setInterval(()=> saveAll(), 30000);
 function init(){
   ['A','B'].forEach(side=>{
     const t=state[side];
+    t.players = (t.players||[]).slice(0,MAXP).map(normalizePlayer);
     while(t.players.length<MAXP) t.players.push(emptyPlayer());
   });
   renderAll();
+  saveAll();
 }
 function populateTeamSelectors(){
   const selA=$('loadTeamA'), selB=$('loadTeamB');
