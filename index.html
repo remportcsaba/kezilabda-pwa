@@ -1,84 +1,1366 @@
 <!DOCTYPE html>
+
 <html lang="hu">
+
 <head>
+
 <meta charset="utf-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+<title>Kézilabda stat – V5 (Időszerkesztő + ONE Veszprém)</title>
+
+
 <title>Kézilabda stat – V6 javított</title>
+
 <meta name="theme-color" content="#1b5cff">
+
+
+
+
+
+<!-- Export (opcionális, maradjon) -->
+
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.1/dist/jspdf.plugin.autotable.min.js"></script>
+
+
+
+
 <style>
+
+
+  :root{
+
+
+    --bg:#0b0c0f; --panel:#0f1218; --card:#101522; --muted:#94a3b8; --text:#e6edf6;
+
+
+    --accent:#1b5cff; --accent2:#16a34a; --warn:#f59e0b; --danger:#ef4444; --border:#1f283a; --chip:#0f1a2a;
+
+
+  }
+
+
+  body{ margin:0; background:var(--bg); color:var(--text);
+
+
+        font:11px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
+
+
+  .topbar{ position:sticky; top:0; z-index:70; background:var(--panel); border-bottom:1px solid var(--border); }
+
+
+  .wrap{ max-width:1200px; margin:0 auto; padding:6px 8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+
+
+  .brand{ font-weight:800; letter-spacing:.2px; font-size:12px; padding-right:6px; }
+
+
+  .pill{ display:flex; gap:4px; align-items:center; padding:3px 6px; border:1px solid var(--border); background:var(--chip); border-radius:6px; }
+
+
+  .pill input, .pill select{ border:0; background:transparent; outline:none; color:var(--text); font-size:11px; min-width:110px; }
+
+
+  .timer{ font-variant-numeric:tabular-nums; font-size:14px; font-weight:800; padding:2px 6px; border-radius:6px; border:1px solid var(--border); background:var(--card); }
+
+
+  .btn{ border:1px solid var(--border); background:var(--card); color:var(--text); border-radius:6px; padding:3px 6px; cursor:pointer; font-size:11px; display:inline-flex; align-items:center; gap:4px;}
+
+
+  .btn.pri{ background:var(--accent); color:#fff; }
+
+
+  .btn.ok{ background:var(--accent2); color:#fff; }
+
+
+  .btn.warn{ background:var(--warn); color:#fff; }
+
+
+  .btn.dan{ background:var(--danger); color:#fff; }
+
+
+  .g{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+
+
+  .container{ max-width:1200px; margin:10px auto; padding:0 8px; display:grid; gap:8px; }
+
+
+  .grid{ display:grid; grid-template-columns:1fr; gap:8px; }
+
+
+  @media(min-width:980px){ .grid{ grid-template-columns:1fr 1fr; } }
+
+
+  .card{ border:1px solid var(--border); border-radius:8px; background:var(--card); }
+
+
+  .inner{ padding:8px; }
+
+
+  .teamhdr{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+
+
+  .teamleft{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+
+  .table-wrap{ overflow:auto; border-radius:6px; border:1px solid var(--border); }
+
+
+  table{ width:100%; border-collapse:collapse; font-size:10.5px; table-layout:fixed; }
+
+
+  thead th{ position:sticky; top:0; background:var(--panel); border-bottom:1px solid var(--border);
+
+
+            padding:2px 4px; text-align:center; font-weight:800; z-index:2; }
+
+
+  tbody td{ border-bottom:1px solid var(--border); padding:1px 3px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+
+  td.left, th.left{ text-align:left; }
+
+
+  .namecell{ display:flex; gap:3px; align-items:center; }
+
+
+  .num{ width:2.6rem; text-align:center; padding:2px 3px; border:1px solid var(--border); border-radius:4px; background:var(--panel); color:var(--text); font-size:10.5px; }
+
+
+  .name{ flex:1; min-width:80px; padding:2px 4px; border:1px solid var(--border); border-radius:4px; background:var(--panel); color:var(--text); font-size:10.5px; }
+
+
+  .enroll{ width:1.2rem; height:1.2rem; }
+
+
+  .inactive{ opacity:.55; }
+
+
+  .sticky-col{ position:sticky; left:0; z-index:1; background:var(--card); }
+
+
+  .sticky-col::after{ content:""; position:absolute; right:-1px; top:0; bottom:0; width:1px; background:var(--border); }
+
+
+  .hint{ color:var(--muted); font-size:10px; }
+
+
+  .i{font-size:14px; line-height:1;}
+
+
+  /* TOC */
+
+
+  .onbtn{ cursor:pointer; padding:2px 6px; border-radius:6px; border:1px solid var(--border); font-weight:700; }
+
+
+  .onbtn.on{ background:#16a34a; color:#fff; }
+
+
+  .onbtn.off{ background:#6b7280; color:#fff; }
+
+
+  .susp-badge{ display:inline-block; padding:0 6px; border-radius:999px; background:#ef4444; color:#fff; font-weight:800; margin-left:6px; }
+
+
+  /* Gyors keret panel */
+
+
+  .inline-roster { display:none; margin:8px 8px 0; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--panel); }
+
+
+  .inline-roster .row { display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
+
+
+  .inline-roster textarea { width:100%; min-height:120px; resize:vertical; border:1px solid var(--border); border-radius:6px; padding:6px; background:var(--card); color:var(--text); font:11px/1.3 system-ui; }
+
+
+  .inline-roster .actions { display:flex; gap:6px; justify-content:flex-end; }
+
+
+  /* Idő-szerkesztő panel */
+
+
+  .time-edit { display:none; gap:6px; align-items:center; }
+
+
+  .time-edit input[type="text"]{ width:64px; text-align:center; border:1px solid var(--border); border-radius:6px;
+
+
+    background:var(--card); color:var(--text); padding:2px 4px; font:11px/1.2 system-ui; }
+
+
+  .time-edit .btn{ padding:2px 6px; }
+
+
+  .time-edit.on{ display:flex; }
+
+
+  /* ONE Veszprém betöltő sáv */
+
+
+  .veszprem-bar{ display:flex; gap:6px; align-items:center; margin:6px 8px 0; }
+
+
+  .veszprem-bar .hint{ margin-left:6px; }
+
+
+  /* Kijelölt sor kiemelés */
+
+
+  tr.selected { outline:2px solid #1b5cff; outline-offset:-2px; }
+
+
+  .left.sticky-col { cursor:pointer; }
+
+
   body{margin:0;font:12px system-ui;background:#0b0c0f;color:#e6edf6}
+
+
   .topbar{position:sticky;top:0;background:#111;border-bottom:1px solid #333;padding:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+
+
   .btn{padding:3px 6px;border:1px solid #333;border-radius:4px;background:#222;color:#fff;cursor:pointer}
+
+
   .btn.on{background:#16a34a}.btn.off{background:#6b7280}.btn.susp{background:#ef4444}
+
+
   table{border-collapse:collapse;width:100%} th,td{border:1px solid #333;padding:2px 4px;font-size:11px;text-align:center}
+
+
   th.left,td.left{text-align:left} input.num{width:30px} input.name{width:120px}
+
+
   .timer{font-size:16px;font-weight:bold;padding:2px 6px;background:#222;border-radius:4px}
+
+
   .suspmark{color:#ef4444;font-weight:bold;margin-left:4px;cursor:pointer}
+
 </style>
+
 </head>
+
+
+<body class="density-ultra">
+
+
+
+
+
+  <div class="topbar">
+
+
+    <div class="wrap g">
+
+
+      <div class="brand">Kézilabda stat – V5</div>
+
+
+      <span class="pill">Mérkőzés: <input id="matchName" placeholder="Pl. Veszprém–Szeged"></span>
+
+
+      <span class="pill">Dátum: <input id="matchDate" type="date"></span>
+
+
+      <span class="pill">Félidő: <span id="halfLabel">1.</span></span>
+
+
+
+
+
+      <!-- Időszerkesztő kapcsoló -->
+
+
+      <span class="pill">
+
+
+        <label><input type="checkbox" id="timeEditToggle"> Idő szerkesztő</label>
+
+
+      </span>
+
+
+
+
+
+      <!-- Óra és időgombok -->
+
+
+      <button class="btn pri" id="startBtn" title="Start"><span class="i">▶︎</span></button>
+
+
+      <button class="btn" id="pauseBtn" title="Pauza"><span class="i">⏸︎</span></button>
+
+
+      <button class="btn" id="resetClockBtn" title="Óra 30:00"><span class="i">⏱️</span>30:00</button>
+
+
+      <span class="timer" id="clock" title="Az idő szerkesztése csak a panel bekapcsolása után lehetséges">30:00</span>
+
+
+
+
+
+      <div id="timeEditPanel" class="time-edit">
+
+
+        <span class="pill">Új idő: <input type="text" id="timeInput" value="30:00" title="MM:SS"></span>
+
+
+        <button class="btn" id="tMinus30" title="-30 mp">-30</button>
+
+
+        <button class="btn" id="tMinus10" title="-10 mp">-10</button>
+
+
+        <button class="btn" id="tPlus10"  title="+10 mp">+10</button>
+
+
+        <button class="btn" id="tPlus30"  title="+30 mp">+30</button>
+
+
+        <button class="btn ok" id="tApply">Beállít</button>
+
+
+      </div>
+
+
+      <div class="pill g">
+
+
+        Hosszabbítás:
+
+
+        <button class="btn" data-et="+60" title="+1:00">+1</button>
+
+
+        <button class="btn" data-et="+300" title="+5:00">+5</button>
+
+
+        <button class="btn" id="etCustom" title="Egyedi…">⋯</button>
+
+
+      </div>
+
+
+
+
+
+      <button class="btn warn" id="switchHalfBtn" title="Félidő váltás"><span class="i">↻</span> Félidő</button>
+
+
+
+
+
+      <span class="pill">TOC mód:
+
+
+        <select id="tocModeSel" title="Egyszerű: nevezett = pályán; Részletes: ON/OFF gomb">
+
+
+          <option value="simple" selected>Egyszerű</option>
+
+
+          <option value="detailed">Részletes</option>
+
+
+        </select>
+
+
+      </span>
+
+
+
+
+
+      <button class="btn" id="undoBtn" title="Visszavonás"><span class="i">↩</span><span id="undoLabel"> Visszavonás</span></button>
+
+
+      <button class="btn dan" id="hardResetBtn" title="Alaphelyzet"><span class="i">🗑️</span></button>
+
+
+    </div>
+
+
 <body>
+
+
 <div class="topbar">
+
+
   <span>Félidő: <span id="halfLabel">1</span></span>
+
+
   <span class="timer" id="clock">00:00</span>
+
+
   <button class="btn" id="startBtn">▶️</button>
+
+
   <button class="btn" id="pauseBtn">⏸️</button>
+
+
   <button class="btn" id="switchHalfBtn">Félidő váltás</button>
+
+
   <select id="tocModeSel">
+
+
     <option value="simple">Egyszerű</option>
+
+
     <option value="detailed">Részletes</option>
+
+
   </select>
+
+
   <button class="btn" id="undoBtn">↩ Visszavonás</button>
+
+
 </div>
+
+
+
+
 
 <div style="display:flex;gap:10px;flex-wrap:wrap">
+
+
   <div style="flex:1">
+
+
     <h3>Csapat A</h3>
+
+
     <table><thead><tr><th class="left"># Név</th><th>ON/OFF</th><th>MIN</th></tr></thead><tbody id="bodyA"></tbody></table>
+
   </div>
+
+
+
+
+
+  <div class="container">
+
+
+    <div class="grid">
+
+
+      <!-- CSAPAT A -->
+
+
+      <div class="card">
+
+
+        <div class="inner teamhdr">
+
+
+          <div class="teamleft">
+
+
+            <span class="pill">Játékos (A):
+
+
+              <select id="pickerA"></select>
+
+
+            </span>
+
+
+            <button class="btn ok" id="thA" title="Technikai hiba +">TH +</button>
+
+
+            <button class="btn" id="blA" title="Blokk +">BL +</button>
+
+
+            <button class="btn warn" id="s2a" title="2 perc kezdete (kijelölt/picker)">2P KEZD</button>
+
+
+            <button class="btn" id="e2a" title="2 perc vége (kijelölt/picker)">2P VÉGE</button>
+
+
+          </div>
+
+
+          <div class="g">
+
+
+            <button class="btn" id="lockA">Névjegyzék lezár</button>
+
+
+            <button class="btn" id="allOnA">Összes be</button>
+
+
+            <button class="btn" id="allOffA">Összes ki</button>
+
+
+            <button class="btn" id="pasteA">Gyors keret</button>
+
+
+          </div>
+
+
+        </div>
+
+
+
+
+
+        <!-- ONE Veszprém panel A -->
+
+
+        <div class="veszprem-bar">
+
+
+          <label class="pill"><input type="checkbox" id="vzA"> ONE Veszprém keret</label>
+
+
+          <button class="btn" id="vzLoadA">Beolvas</button>
+
+
+          <span class="hint">A lista mindig elérhető; beolvasás után szerkeszthető és bővíthető.</span>
+
+
+        </div>
+
+
+
+
+
+        <div class="inner table-wrap">
+
+
+          <table>
+
+
+            <thead>
+
+
+              <tr>
+
+
+                <th class="left sticky-col" style="width:220px">✓ # / Név (A)</th>
+
+
+                <th style="width:44px">ON</th>
+
+
+                <th style="width:70px">MIN</th>
+
+
+                <th style="width:52px">Löv</th>
+
+
+                <th style="width:52px">Gól</th>
+
+
+                <th style="width:44px">%</th>
+
+
+                <th style="width:44px">7A</th>
+
+
+                <th style="width:44px">7G</th>
+
+
+                <th style="width:44px">7%</th>
+
+
+                <th style="width:52px">TH</th>
+
+
+                <th style="width:52px">BL</th>
+
+
+              </tr>
+
+
+            </thead>
+
+
+            <tbody id="bodyA"></tbody>
+
+
+          </table>
+
+
+        </div>
+
+
+
+
+
+        <!-- Gyors keret – A -->
+
+
+        <div id="rosterPanelA" class="inline-roster">
+
+
+          <div class="row"><strong>Gyors keret (A)</strong> <span class="hint">Formátum: „<code>MEZSZÁM szóköz NÉV</code>”, soronként egy.</span></div>
+
+
+          <textarea id="rosterTextA" placeholder="7 LIGETVÁRI PATRIK
+
+
+66 MAHÉ MATHIEU
+
+
+27 LAUKO MÁTÉ"></textarea>
+
+
+          <div class="actions">
+
+
+            <button class="btn" id="rosterCancelA">Mégse</button>
+
+
+            <button class="btn ok" id="rosterApplyA">Beolvas</button>
+
+
+          </div>
+
+
+        </div>
+
+
+
+
+
+        <div class="inner hint">Egyszerű: pipa = pályán. Részletes: ON gomb. 2P alatt a MIN nem ketyeg. A névre kattintva kijelölöd a sort (2P a kijelöltre megy).</div>
+
+
+      </div>
+
+
+
+
+
+      <!-- CSAPAT B -->
+
+
+      <div class="card">
+
+
+        <div class="inner teamhdr">
+
+
+          <div class="teamleft">
+
+
+            <span class="pill">Játékos (B):
+
+
+              <select id="pickerB"></select>
+
+
+            </span>
+
+
+            <button class="btn ok" id="thB" title="Technikai hiba +">TH +</button>
+
+
+            <button class="btn" id="blB" title="Blokk +">BL +</button>
+
+
+            <button class="btn warn" id="s2b" title="2 perc kezdete (kijelölt/picker)">2P KEZD</button>
+
+
+            <button class="btn" id="e2b" title="2 perc vége (kijelölt/picker)">2P VÉGE</button>
+
+
+          </div>
+
+
+          <div class="g">
+
+
+            <button class="btn" id="lockB">Névjegyzék lezár</button>
+
+
+            <button class="btn" id="allOnB">Összes be</button>
+
+
+            <button class="btn" id="allOffB">Összes ki</button>
+
+
+            <button class="btn" id="pasteB">Gyors keret</button>
+
+
+          </div>
+
+
+        </div>
+
+
+
+
+
+        <!-- ONE Veszprém panel B -->
+
+
+        <div class="veszprem-bar">
+
+
+          <label class="pill"><input type="checkbox" id="vzB"> ONE Veszprém keret</label>
+
+
+          <button class="btn" id="vzLoadB">Beolvas</button>
+
+
+          <span class="hint">A lista mindig elérhető; beolvasás után szerkeszthető és bővíthető.</span>
+
+
+        </div>
+
+
+
+
+
+        <div class="inner table-wrap">
+
+
+          <table>
+
+
+            <thead>
+
+
+              <tr>
+
+
+                <th class="left sticky-col" style="width:220px">✓ # / Név (B)</th>
+
+
+                <th style="width:44px">ON</th>
+
+
+                <th style="width:70px">MIN</th>
+
+
+                <th style="width:52px">Löv</th>
+
+
+                <th style="width:52px">Gól</th>
+
+
+                <th style="width:44px">%</th>
+
+
+                <th style="width:44px">7A</th>
+
+
+                <th style="width:44px">7G</th>
+
+
+                <th style="width:44px">7%</th>
+
+
+                <th style="width:52px">TH</th>
+
+
+                <th style="width:52px">BL</th>
+
+
+              </tr>
+
+
+            </thead>
+
+
+            <tbody id="bodyB"></tbody>
+
+
+          </table>
+
+
+        </div>
+
+
+
+
+
+        <!-- Gyors keret – B -->
+
+
+        <div id="rosterPanelB" class="inline-roster">
+
+
+          <div class="row"><strong>Gyors keret (B)</strong> <span class="hint">Formátum: „<code>MEZSZÁM szóköz NÉV</code>”, soronként egy.</span></div>
+
+
+          <textarea id="rosterTextB" placeholder="7 JÁTÉKOS NÉV
+
+
+10 MINTA JÁTÉKOS
+
+
+22 VALAKI"></textarea>
+
+
+          <div class="actions">
+
+
+            <button class="btn" id="rosterCancelB">Mégse</button>
+
+
+            <button class="btn ok" id="rosterApplyB">Beolvas</button>
+
+
+          </div>
+
+
+        </div>
+
+
+
+
+
+        <div class="inner hint">Egyszerű: pipa = pályán. Részletes: ON gomb. 2P alatt a MIN nem ketyeg. A névre kattintva kijelölés működik.</div>
+
+
+      </div>
+
+
+    </div>
+
+
   <div style="flex:1">
+
+
     <h3>Csapat B</h3>
+
+
     <table><thead><tr><th class="left"># Név</th><th>ON/OFF</th><th>MIN</th></tr></thead><tbody id="bodyB"></tbody></table>
+
   </div>
+
+
 </div>
 
+
+
+
 <script>
+
+
+/* ===== Segéd ===== */
+
 const $=id=>document.getElementById(id);
+
+
+const pct=(n,d)=> d? (Math.round((n/d*1000))/10).toFixed(1)+"%":"0%";
+
+
+const toMMSS=(sec)=>{sec=Math.max(0,Math.floor(sec));const m=Math.floor(sec/60),s=sec%60;return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');};
+
+
+const todayStr=()=> new Date().toISOString().slice(0,10);
+
+
+
+
+
+/* ===== Állapot ===== */
+
+
+const MAXP=20, UNDO_LIMIT=20;
+
+
+const emptyPlayer=()=>({active:true,num:"",name:"",shots:0,goals:0,p7a:0,p7g:0,th:0,bl:0,on:false,tocSec:0,susp:false});
+
+
+const emptyTeam =()=>({locked:false, name:"", logo:"", players:Array.from({length:MAXP}, emptyPlayer)});
+
+
+let state={ matchName:"", matchDate:todayStr(), currentHalf:1, remainingSeconds:30*60, tocMode:'simple', A:emptyTeam(), B:emptyTeam() };
+
+
+let tmr=null, undoStack=[];
+
+
+let selectedRow={A:null,B:null};
+
+
+
+
+
+/* ===== ONE Veszprém keret ===== */
+
+
+const ONE_VESZPREM=[
+
+
+  {num:"1",  name:"MIKAEL APPELGREN"},
+
+
+  {num:"2",  name:"THIAGUS PETRUS"},
+
+
+  {num:"5",  name:"IVAN MARTINOVIC"},
+
+
+  {num:"9",  name:"HUGO DESCAT"},
+
+
+  {num:"12", name:"RODRIGO CORRALES"},
+
+
+  {num:"15", name:"AHMED HESHAM"},
+
+
+  {num:"21", name:"BJARKI MÁR ELÍSSON"},
+
+
+  {num:"23", name:"LIGETVÁRI PATRIK"},
+
+
+  {num:"24", name:"GASPER MARGUC"},
+
+
+  {num:"25", name:"LUKA CINDRIC"},
+
+
+  {num:"27", name:"DOPJERA ADAM"},
+
+
+  {num:"29", name:"NEDIM REMILI"},
+
+
+  {num:"32", name:"YANIS LENNE"},
+
+
+  {num:"39", name:"YEHIA ELDERAA"},
+
+
+  {num:"46", name:"DRAGAN PECHMALBEC"},
+
+
+  {num:"54", name:"BALOGH BOTOND"},
+
+
+  {num:"66", name:"GÁNCS-PETŐ MÁTÉ"},
+
+
+  {num:"67", name:"GYŐRI NÁNDOR"},
+
+
+  {num:"77", name:"KARDOS MÁRTON CSABA"},
+
+
+  {num:"80", name:"AHMED ADEL"},
+
+
+  {num:"88", name:"MOLNÁR ROBIN"},
+
+
+  {num:"90", name:"ALI ZEIN"},
+
+
+  {num:"91", name:"VÁRADY-SZABÓ LÁSZLÓ"},
+
+
+  {num:"97", name:"SZABÓ LEVENTE"},
+
+
+  {num:"98", name:"BARNA JÁNOS DÁNIEL"},
+
+
+];
+
+
+
+
+
+/* ===== Undo ===== */
+
+
+function updateUndoLabel(){ const u=undoStack[0]; $('undoLabel').textContent=u?(' '+u.label):' Visszavonás'; $('undoBtn').disabled=!u; }
+
+
+function pushUndoTime(label, prev){ undoStack.unshift({type:'time',label,prev}); if(undoStack.length>UNDO_LIMIT) undoStack.pop(); updateUndoLabel(); }
+
+
+function pushUndoToggle(label, side, index, field, prev){ undoStack.unshift({type:'toggle',label,side,index,field,prev}); if(undoStack.length>UNDO_LIMIT) undoStack.pop(); updateUndoLabel(); }
+
+
+function pushUndoDelta(label, side, index, field, delta){ undoStack.unshift({type:'delta',label,side,index,field,delta}); if(undoStack.length>UNDO_LIMIT) undoStack.pop(); updateUndoLabel(); }
+
+
 const toMMSS=s=>{s=Math.floor(s);let m=Math.floor(s/60),ss=s%60;return String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0')};
 
+
+
+
+/* ===== TOC ===== */
+
+
+function isOnCourt(p){ if(p.susp) return false; return (state.tocMode==='simple') ? !!p.active : !!p.on; }
+
+
+function tickToC(){ if(!tmr) return; ['A','B'].forEach(side=> state[side].players.forEach(p=>{ if(isOnCourt(p)) p.tocSec=(p.tocSec||0)+1; })); }
+
+
 const MAXP=7;
+
+
 const empty=()=>({num:"",name:"",active:true,on:false,sec:0,susp:false});
+
+
 let state={half:1,time:0,running:false,mode:'simple',A:Array.from({length:MAXP},empty),B:Array.from({length:MAXP},empty)};
+
+
 let timer=null,undo=[];
 
+
+
+
+/* ===== Render ===== */
+
+
+function populatePicker(side){
+
+
+  const pick=(side==='A')?$('pickerA'):$('pickerB'); const team=state[side]; const sel=pick.value;
+
+
+  pick.innerHTML="";
+
+
+  team.players.forEach((p,i)=>{ const o=document.createElement('option'); o.value=String(i); o.textContent=`${p.num||i+1} – ${p.name||('Játékos '+(i+1))}`; pick.appendChild(o); });
+
+
+  if(sel) pick.value=sel;
+
+
+}
+
 function renderTeam(side){
+
+
+  const team=state[side], body=document.querySelector(side==='A'?'#bodyA':'#bodyB'); if(!body) return;
+
+
+  body.innerHTML="";
+
+
+  team.players.forEach((p,i)=>{
+
+
+    const tr=document.createElement('tr'); if(!p.active) tr.classList.add('inactive'); if(selectedRow[side]===i) tr.classList.add('selected'); tr.dataset.index=i;
+
+
+
+
+
+    // név + mez + nevezés
+
+
+    const td=document.createElement('td'); td.className='left sticky-col';
+
+
+    const wrap=document.createElement('div'); wrap.className='namecell';
+
+
+    const chk=document.createElement('input'); chk.type='checkbox'; chk.className='enroll'; chk.checked=p.active;
+
+
+    chk.addEventListener('change',()=>{ pushUndoToggle(`${side} nevezés: #${p.num||i+1} ${p.name||''}`, side,i,'active',p.active); p.active=chk.checked; updateClock(); renderTeam(side); });
+
+
+    const num=document.createElement('input'); num.className='num'; num.placeholder='#'; num.value=p.num; num.addEventListener('input',()=>{ p.num=num.value; populatePicker(side); });
+
+
+    const name=document.createElement('input'); name.className='name'; name.placeholder='Név'; name.value=p.name; name.addEventListener('input',()=>{ p.name=name.value; populatePicker(side); });
+
+
+    wrap.append(chk,num,name); td.appendChild(wrap);
+
+
+    td.addEventListener('click',(ev)=>{ const tag=(ev.target.tagName||'').toLowerCase(); if(tag==='input') return; selectedRow[side]=(selectedRow[side]===i?null:i); const pick=(side==='A')?$('pickerA'):$('pickerB'); pick.value=String(i); renderTeam(side); });
+
+
+    tr.appendChild(td);
+
+
+
+
+
+    // ON gomb
+
+
+    const tdOn=document.createElement('td'); const btn=document.createElement('button');
+
+
+    btn.className='onbtn '+(p.on?'on':'off'); btn.textContent=p.on?'ON':'OFF'; btn.disabled=(state.tocMode!=='detailed'); btn.style.opacity=(state.tocMode==='detailed')?'1':'.5';
+
+
+    btn.addEventListener('click',()=>{ pushUndoToggle(`${side} ON/OFF: #${p.num||i+1} ${p.name||''}`, side,i,'on',p.on); p.on=!p.on; renderTeam(side); });
+
+
+    tdOn.appendChild(btn); tr.appendChild(tdOn);
+
+
+
+
+
+    // MIN + 2P badge
+
+
+    const tdMin=document.createElement('td'); tdMin.textContent=toMMSS(p.tocSec||0); if(p.susp){ const b=document.createElement('span'); b.className='susp-badge'; b.textContent='2P'; tdMin.appendChild(b); } tr.appendChild(tdMin);
+
+
+
+
+
+    // stat cellák
+
+
+    const mk=(val,fn)=>{ const td=document.createElement('td'); td.textContent=val; td.style.cursor='pointer'; td.addEventListener('click',()=>{ fn(); renderTeam(side); }); return td; };
+
+
+    tr.appendChild(mk(p.shots,()=>{ p.shots++; pushUndoDelta("Lövés",side,i,'shots',-1); }));
+
+
+    tr.appendChild(mk(p.goals,()=>{ p.goals++; p.shots++; pushUndoDelta("Gól",side,i,'_goal_combo',-1); }));
+
+
+    const tdPct=document.createElement('td'); tdPct.textContent=pct(p.goals,p.shots); tr.appendChild(tdPct);
+
+
+    tr.appendChild(mk(p.p7a ,()=>{ p.p7a++; p.shots++; pushUndoDelta("7A",side,i,'_7a_combo',-1); }));
+
+
+    tr.appendChild(mk(p.p7g ,()=>{ p.p7g++; p.p7a++; p.shots++; p.goals++; pushUndoDelta("7G",side,i,'_7g_combo',-1); }));
+
+
+    const td7p=document.createElement('td'); td7p.textContent=pct(p.p7g,p.p7a); tr.appendChild(td7p);
+
+
+    tr.appendChild(mk(p.th   ,()=>{ p.th++; pushUndoDelta("TH",side,i,'th',-1); }));
+
+
+    tr.appendChild(mk(p.bl   ,()=>{ p.bl++; pushUndoDelta("BL",side,i,'bl',-1); }));
+
+
+    body.appendChild(tr);
+
+
   const body=$(side==='A'?'bodyA':'bodyB'); body.innerHTML="";
+
+
   state[side].forEach((p,i)=>{
+
+
     const tr=document.createElement('tr');
+
+
     const td=document.createElement('td');td.className='left';
+
+
     const num=document.createElement('input');num.className='num';num.value=p.num;num.oninput=e=>p.num=e.target.value;
+
+
     const name=document.createElement('input');name.className='name';name.value=p.name;name.oninput=e=>p.name=e.target.value;
+
+
     td.append(num,name); if(p.susp){const x=document.createElement('span');x.textContent='✖';x.className='suspmark';x.onclick=()=>{pushUndo(side,i,'susp',p.susp);p.susp=!p.susp;render()};td.append(x)}; tr.append(td);
+
+
     const td2=document.createElement('td');
+
+
     const b=document.createElement('button'); b.className='btn '+(p.on?'on':'off'); b.textContent=p.on?'ON':'OFF';
+
+
     b.onclick=()=>{if(state.mode==='detailed'){pushUndo(side,i,'on',p.on);p.on=!p.on;render()}}; td2.append(b); tr.append(td2);
+
+
     const td3=document.createElement('td');td3.textContent=toMMSS(p.sec); tr.append(td3);
+
+
     body.append(tr);
+
   });
+
+
+  populatePicker(side);
+
 }
+
+
+function renderAll(){ $('matchName').value=state.matchName; $('matchDate').value=state.matchDate; $('halfLabel').textContent=state.currentHalf+"."; $('tocModeSel').value=state.tocMode; updateClock(); renderTeam('A'); renderTeam('B'); updateUndoLabel(); }
+
+
+
+
+
+/* ===== Óra ===== */
+
+
+function updateClock(){ $('clock').textContent=toMMSS(state.remainingSeconds); $('timeInput').value=toMMSS(state.remainingSeconds); }
+
+
+function start(){ if(tmr) return; tmr=setInterval(()=>{ state.remainingSeconds=Math.max(0,state.remainingSeconds-1); updateClock(); tickToC(); },1000); }
+
+
+function pause(){ clearInterval(tmr); tmr=null; }
+
+
+function addExtra(sec){ const prev=state.remainingSeconds; state.remainingSeconds=Math.max(0,state.remainingSeconds+sec); updateClock(); pushUndoTime("Idő változott", prev); }
+
+
+function setTimeStr(v){ const m=v.match(/^(\d+):([0-5]\d)$/); if(!m) return; const prev=state.remainingSeconds; state.remainingSeconds=parseInt(m[1])*60+parseInt(m[2]); updateClock(); pushUndoTime("Idő beállítva", prev); }
+
+
+
+
+
+/* ===== Események ===== */
+
+
 function render(){
+
+
   $('halfLabel').textContent=state.half;
+
+
   $('clock').textContent=toMMSS(state.time);
+
+
   renderTeam('A'); renderTeam('B');
+
+
 }
+
+
 function tick(){ state.time++; ['A','B'].forEach(s=>state[s].forEach(p=>{if(state.mode==='simple'?p.active: p.on){if(!p.susp)p.sec++}})); render()}
+
+
 function start(){if(!timer){timer=setInterval(tick,1000)}}
+
+
 function pause(){clearInterval(timer);timer=null}
+
 $('startBtn').onclick=start; $('pauseBtn').onclick=pause;
+
+
+$('resetClockBtn').onclick=()=>{ if(!$('timeEditToggle').checked) return; state.remainingSeconds=30*60; updateClock(); };
+
+
+$('tMinus30').onclick=()=>{ if($('timeEditToggle').checked) addExtra(-30); };
+
+
+$('tMinus10').onclick=()=>{ if($('timeEditToggle').checked) addExtra(-10); };
+
+
+$('tPlus10').onclick=()=>{ if($('timeEditToggle').checked) addExtra(10); };
+
+
+$('tPlus30').onclick=()=>{ if($('timeEditToggle').checked) addExtra(30); };
+
+
+$('tApply').onclick=()=>{ if($('timeEditToggle').checked) setTimeStr($('timeInput').value); };
+
+
+$('timeEditToggle').onchange=(e)=>{ $('timeEditPanel').classList.toggle('on', e.target.checked); };
+
+
+
+
+
+/* ===== 2P ===== */
+
+
+function getTargetIndex(side){ return selectedRow[side]!==null?selectedRow[side]:parseInt((side==='A'?$('pickerA'):$('pickerB')).value||0); }
+
+
+$('s2a').onclick=()=>{ const i=getTargetIndex('A'); state.A.players[i].susp=true; renderTeam('A'); };
+
+
+$('e2a').onclick=()=>{ const i=getTargetIndex('A'); state.A.players[i].susp=false; renderTeam('A'); };
+
+
+$('s2b').onclick=()=>{ const i=getTargetIndex('B'); state.B.players[i].susp=true; renderTeam('B'); };
+
+
+$('e2b').onclick=()=>{ const i=getTargetIndex('B'); state.B.players[i].susp=false; renderTeam('B'); };
+
+
+
+
+
+/* ===== Gyors keret ===== */
+
+
+function applyRosterText(side,text){ const lines=text.split(/\n/).map(s=>s.trim()).filter(Boolean); lines.forEach((ln,i)=>{ const m=ln.match(/^(\d+)\s+(.*)$/); if(m){ state[side].players[i].num=m[1]; state[side].players[i].name=m[2]; state[side].players[i].active=true; }}); renderTeam(side); }
+
+
+$('rosterApplyA').onclick=()=>{ applyRosterText('A',$('rosterTextA').value); $('rosterPanelA').style.display='none'; };
+
+
+$('rosterApplyB').onclick=()=>{ applyRosterText('B',$('rosterTextB').value); $('rosterPanelB').style.display='none'; };
+
+
+$('pasteA').onclick=()=>{ $('rosterPanelA').style.display='block'; };
+
+
+$('pasteB').onclick=()=>{ $('rosterPanelB').style.display='block'; };
+
+
+
+
+
+/* ===== ONE Veszprém beolvasás ===== */
+
+
+function loadVeszpremInto(side){ ONE_VESZPREM.forEach((pl,i)=>{ state[side].players[i].num=pl.num; state[side].players[i].name=pl.name; state[side].players[i].active=true; }); renderTeam(side); }
+
+
+$('vzLoadA').onclick=()=>{ if($('vzA').checked) loadVeszpremInto('A'); };
+
+
+$('vzLoadB').onclick=()=>{ if($('vzB').checked) loadVeszpremInto('B'); };
+
+
+
+
+
+/* ===== Init ===== */
+
+
+function init(){ renderAll(); }
+
+
+init();
+
+
 $('switchHalfBtn').onclick=()=>{pause(); if(state.half===1){state.half=2;state.time=30*60}else{state.half=1;state.time=0} render()}
+
+
 $('tocModeSel').onchange=e=>{state.mode=e.target.value;render()};
+
+
 function pushUndo(side,i,field,prev){undo.unshift({side,i,field,prev});if(undo.length>20)undo.pop();}
+
+
 $('undoBtn').onclick=()=>{const u=undo.shift();if(!u)return;state[u.side][u.i][u.field]=u.prev;render()}
+
+
 render();
+
 </script>
+
 </body>
+
 </html>
